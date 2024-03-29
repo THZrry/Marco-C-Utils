@@ -20,7 +20,7 @@ Usage:
     Vector_push_back
     Vector_insert    *: not completed, only two arguments (vector, index)
     Vector_erase
-    Vector_popback
+    Vector_pop_back
     Vector_clear
     Vector_at
     Vector_begin
@@ -51,6 +51,10 @@ Lisence: WTFPL
 Author : THZrry(github.com/THZrry)
 
 Chengelog:
+2024.3.30
+  Now offset is absoultely, so the type is not restricted to int or bigger.
+  Bugfix in earase functions.
+  TODO: there's a more unsigned char's pos in vector, is for expanding use.
 2024.2.23
   [C++] Changed iterator use to index use (look at cpptest)
   Changed size saving type to size_t
@@ -71,18 +75,19 @@ Chengelog:
 #include <malloc.h>
 #include <stddef.h>
 /* marcos */
+#define _VOFFS                                   (sizeof(size_t) + sizeof(char))
 #define Vector(type)                             type*
-#define New_vector(type)                         ((type*)calloc(2,sizeof(type))+2)
-#define Vector_size(vector)                      (*(size_t*)(vector-2))
+#define New_vector(type)                         ((type*)(calloc(1,_VOFFS)+_VOFFS))
+#define Vector_size(vector)                      (*(size_t*)((void*)(vector)-_VOFFS))
 #define Vector_empty(vector)                     (Vector_size(vector)>0)
 #define Vector_push_back(vector,x)               do{                                               \
-        vector = realloc(vector-2,(++Vector_size(vector))*(sizeof *vector));                       \
-        vector += 2;                                                                               \
+        vector = realloc((void*)vector-_VOFFS,(++Vector_size(vector))*(sizeof *vector) + _VOFFS);  \
+        vector = (void*)(vector) + _VOFFS;                                                         \
         vector[Vector_size(vector)-1] = x;                                                         \
         }while(0)
 #define Vector_insert(vector,index,x)            do{                                               \
-        vector = realloc(vector-2, Vector_size(vector)++*(sizeof *vector));                        \
-        vector += 2;                                                                               \
+        vector = realloc((void*)vector-_VOFFS, ++Vector_size(vector)*(sizeof *vector) + _VOFFS);   \
+        vector = (void*)vector + _VOFFS;                                                           \
         for (size_t i=Vector_size(vector); i>index; --i)                                           \
             vector[i] = vector[i-1];                                                               \
         vector[index] = x;                                                                         \
@@ -90,13 +95,13 @@ Chengelog:
 #define Vector__erase1(vector,index)             do{                                               \
         for (size_t i=index+1; i<Vector_size(vector); i++)                                         \
             vector[i-1] = vector[i];                                                               \
-        vector = realloc(vector-2, Vector_size(vector)--*(sizeof *vector));                        \
-        vector += 2;                                                                               \
+        vector = realloc((void*)vector-_VOFFS, --Vector_size(vector)*(sizeof *vector)+_VOFFS);     \
+        vector = (void*)vector + _VOFFS;                                                           \
         }while(0)
 #define Vector__erase2(vector,first,last)        do{                                               \
-        typeof(vector) to = vector + first,     from = vector + last;                              \
+        typeof(vector) to = vector + first,      from = vector + last;                             \
         register size_t count = Vector_size(vector) - last;                                        \
-        register unsigned int n = count / 4;                                                       \
+        register size_t n = count / 4;                                                             \
         switch (count % 4){                                                                        \
             case 0: do{ *to++ = *from++;                                                           \
             case 3:     *to++ = *from++;                                                           \
@@ -105,14 +110,14 @@ Chengelog:
                     }while (n --> 0);                                                              \
         }                                                                                          \
         Vector_size(vector) -= last-first;                                                         \
-        vector = realloc(vector-2, Vector_size(vector)*(sizeof *vector));                          \
-        vector += 2;                                                                               \
+        vector = realloc((void*)vector-_VOFFS, Vector_size(vector)*(sizeof *vector)+_VOFFS);       \
+        vector = (void*)vector + _VOFFS;                                                           \
         }while(0)
 #define Vector_erase(vector,...)                _Vector_GetMacro(__VA_ARGS__, Vector__erase2, Vector__erase1, ...)(vector, __VA_ARGS__)
 #define Vector_pop_back(vector)                  Vector_erase(vector, Vector_size(vector)-1)
 #define Vector_clear(vector)                     do{                                               \
-        vector = realloc(vector-2, 2 * sizeof *vector);                                            \
-        vector += 2;                                                                               \
+        vector = realloc((void*)vector-_VOFFS, _VOFFS);                                            \
+        vector = (void*)vector + _VOFFS;                                                           \
         Vector_size(vector) = 0;                                                                   \
         }while(0)
 #define Vector_at(vector,pos)                    (vector + (pos>0? (pos<Vector_size(vector)? pos: Vector_size(vector)-1): 0))
@@ -120,7 +125,7 @@ Chengelog:
 #define Vector_end(vector)                       (vector + Vector_size(vector) - 1)
 #define Vector_front(vector)                     (vector)
 #define Vector_back(vector)                      (vector + Vector_size(vector) - 1)
-#define Vector_release(vector)                   (free(vector-2))
+#define Vector_release(vector)                   (free((void*)vector-_VOFFS))
 
 #else
 /* C++ Define (compatibling in C++) */
