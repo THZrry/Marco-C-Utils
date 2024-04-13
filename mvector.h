@@ -4,11 +4,10 @@ Using Vectors in C like in C++.
 C standard: gnuc99 (isoc99+typeof)
 In C:
     Marcos will help you write LIKE C++ vectors.
-    WARNING: You can only use for data > 4 bytes per size!
-             Because (vector-1) is an int saves the size!
     References will be pointers.
 In C++:
     Your code will be translated to C++ vectors.
+    Or define _MFORCE_C_ to force C version.
     But iterator is not supported!
 
 Usage:
@@ -17,6 +16,9 @@ Usage:
         Vector_[original method name](vector, args...);
     Now support:
     Vector_size
+    Vector_empty
+    Vector_capacity
+    Vector_reverse
     Vector_push_back
     Vector_insert    *: not completed, only two arguments (vector, index)
     Vector_erase
@@ -51,6 +53,11 @@ Lisence: WTFPL
 Author : THZrry(github.com/THZrry)
 
 Chengelog:
+2024.4.13
+  Now the "char" in 3.30 has changed to be size_t, and it supports reserving now.
+  Now Vector__erase1 calls Vector__erase2 (instead of its own code)
+  Added Vector_capacity, Vector_reserve, _vector_count_reverse
+  Added _MFORCE_C_ marco, to force C in C++.
 2024.3.30
   Now offset is absoultely, so the type is not restricted to int or bigger.
   Bugfix in earase functions.
@@ -68,36 +75,56 @@ Chengelog:
 #define _MVECTOR_
 
 /* tool */
-#define _Vector_GetMacro(_1,_2,NAME,...) NAME
+#define _vector_get_macro(_1,_2,NAME,...) NAME
 
-# ifndef __cplusplus
+#if !defined(__cplusplus) || defined(_MFORCE_C_)
+#  ifdef __cplusplus
+extern "C"{
+#  endif
 /* C Define (main body) */
 #include <malloc.h>
 #include <stddef.h>
+
+#ifndef _mmalloc             /* Customize memory pool */
+#define _mmalloc  malloc
+#define _mcalloc  calloc
+#define _mrealloc realloc
+#define _mfree    free
+#endif
+size_t _vector_count_reserve(size_t now){
+    switch (now){
+        case 0: return 2;
+        case 1: return 4;
+        case 2: return 6;
+        case 3: return 8;
+        default: return now + (now>>1);
+    }
+}
 /* marcos */
-#define _VOFFS                                   (sizeof(size_t) + sizeof(char))
+#define _VOFFS                                   (sizeof(size_t) << 1)
 #define Vector(type)                             type*
-#define New_vector(type)                         ((type*)(calloc(1,_VOFFS)+_VOFFS))
+#define New_vector(type)                         ((type*)(_mcalloc(1,_VOFFS)+_VOFFS))
 #define Vector_size(vector)                      (*(size_t*)((void*)(vector)-_VOFFS))
 #define Vector_empty(vector)                     (Vector_size(vector)>0)
+#define Vector_capacity(vector)                  (*(size_t*)((void*)(vector)-sizeof(size_t)))
+#define Vector_reserve(vector,x)                 do{                                               \
+        vector = _mrealloc((void*)vector-_VOFFS,(x*sizeof(*vector) + _VOFFS)) + _VOFFS;            \
+        Vector_capacity(vector) = x;                                                               \
+        }while(0)
 #define Vector_push_back(vector,x)               do{                                               \
-        vector = realloc((void*)vector-_VOFFS,(++Vector_size(vector))*(sizeof *vector) + _VOFFS);  \
-        vector = (void*)(vector) + _VOFFS;                                                         \
-        vector[Vector_size(vector)-1] = x;                                                         \
+        if (Vector_capacity(vector) <= Vector_size(vector))                                        \
+            Vector_reserve(vector, _vector_count_reserve(Vector_size(vector)));                    \
+        vector[Vector_size(vector)++] = x;                                                         \
         }while(0)
 #define Vector_insert(vector,index,x)            do{                                               \
-        vector = realloc((void*)vector-_VOFFS, ++Vector_size(vector)*(sizeof *vector) + _VOFFS);   \
-        vector = (void*)vector + _VOFFS;                                                           \
+        if (Vector_capacity(vector) <= Vector_size(vector))                                        \
+            Vector_reserve(vector, _vector_count_reserve(Vector_size(vector)));                    \
         for (size_t i=Vector_size(vector); i>index; --i)                                           \
             vector[i] = vector[i-1];                                                               \
         vector[index] = x;                                                                         \
+        Vector_size(vector)++;                                                                     \
         }while(0)
-#define Vector__erase1(vector,index)             do{                                               \
-        for (size_t i=index+1; i<Vector_size(vector); i++)                                         \
-            vector[i-1] = vector[i];                                                               \
-        vector = realloc((void*)vector-_VOFFS, --Vector_size(vector)*(sizeof *vector)+_VOFFS);     \
-        vector = (void*)vector + _VOFFS;                                                           \
-        }while(0)
+#define Vector__erase1(vector,index)             Vector__erase2(vector, index, index+1)
 #define Vector__erase2(vector,first,last)        do{                                               \
         typeof(vector) to = vector + first,      from = vector + last;                             \
         register size_t count = Vector_size(vector) - last;                                        \
@@ -108,33 +135,32 @@ Chengelog:
             case 2:     *to++ = *from++;                                                           \
             case 1:     *to++ = *from++;                                                           \
                     }while (n --> 0);                                                              \
-        }                                                                                          \
+        };                                                                                         \
         Vector_size(vector) -= last-first;                                                         \
-        vector = realloc((void*)vector-_VOFFS, Vector_size(vector)*(sizeof *vector)+_VOFFS);       \
-        vector = (void*)vector + _VOFFS;                                                           \
         }while(0)
-#define Vector_erase(vector,...)                _Vector_GetMacro(__VA_ARGS__, Vector__erase2, Vector__erase1, ...)(vector, __VA_ARGS__)
+#define Vector_erase(vector,...)                _vector_get_macro(__VA_ARGS__, Vector__erase2, Vector__erase1, ...)(vector, __VA_ARGS__)
 #define Vector_pop_back(vector)                  Vector_erase(vector, Vector_size(vector)-1)
-#define Vector_clear(vector)                     do{                                               \
-        vector = realloc((void*)vector-_VOFFS, _VOFFS);                                            \
-        vector = (void*)vector + _VOFFS;                                                           \
-        Vector_size(vector) = 0;                                                                   \
-        }while(0)
+#define Vector_clear(vector)                     do{Vector_size(vector) = 0;}while(0)
 #define Vector_at(vector,pos)                    (vector + (pos>0? (pos<Vector_size(vector)? pos: Vector_size(vector)-1): 0))
 #define Vector_begin(vector)                     (vector)
 #define Vector_end(vector)                       (vector + Vector_size(vector) - 1)
 #define Vector_front(vector)                     (vector)
 #define Vector_back(vector)                      (vector + Vector_size(vector) - 1)
-#define Vector_release(vector)                   (free((void*)vector-_VOFFS))
+#define Vector_release(vector)                   (_mfree((void*)vector-_VOFFS))
 
+#  ifdef _cplusplus
+}
+#  endif
 #else
 /* C++ Define (compatibling in C++) */
-
+/* If defined _MFORCE_C_, this will not be avaliable. */
 #include <vector>
 #define Vector(type)                             std::vector<type>
 #define New_vector(type)                         std::vector<type>()
 #define Vector_size(vector)                      vector.size()
 #define Vector_empty()                           vector.empty()
+#define Vector_capacity()                        vector.capacity()
+#define Vector_reserve(x)                        vector.capacity(x)
 #define Vector_push_back(vector,x)               vector.push_back(x)
 #define Vector_insert(vector,index,x)            vector.insert(index,x)
 #define Vector__erase1(vector,index)             vector.erase(vector.begin()+index)
