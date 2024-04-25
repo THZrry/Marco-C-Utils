@@ -1,8 +1,7 @@
-# Marco C Utils
+# Mple Si
 **English** [简体中文](README_zh.md)
 ***
-This is the current name.
-I wanna use a light c vector, but my known existing libraries are too heavy for me, so I put this cvector with only marcos here. I may add morethings in the future.
+This is a SiMple C headers library. In the beginning its name was `Macro C Utils` and now renamed and not only based on macros.
 
 # MVector
 this is a simple vector can be used like C arrays or C++ vectors. The increasing factor is 50%, that seems to be the same as msvc STL.
@@ -36,7 +35,5 @@ for (MUnicode chr; chr=mstr_one(iter); mstr_next(&iter))
 ```
 This is only a part. Explore `mstring.h` for more!
 
-# About RBTree
-Not For Now. Coding on mstring.
-when it comes to inserting data with rotating, it crashes, with segmentation fault.
-The code with a number of marcos is near unreadable, and I'm not able to solve.
+# RBTree
+Don't se this though it's not completed.
